@@ -1,0 +1,110 @@
+---
+title: "Homework2"
+---
+
+```{r include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE, message = FALSE)
+
+```
+
+```{r load_libraries}
+
+library(tidyverse)
+
+library(tidymodels)
+
+```
+
+```{r load_data}
+
+wine = read_csv(here::here("data","winequality_red.csv"))
+
+```
+
+# Preface
+
+We can use the data for prediction without assumptions because we don't care about
+causality. If cigar smoking can predict better health I don't care that this is because
+cigar smokers are wealthy people who can afford better treatment.
+
+## Separability
+
+The downside in adding interactions is that if we got the interaction wrong we'll cause overfitting.
+
+## Normal distribution
+1. Classical economist's stories such as consumption that is characterized by different
+dispersion (variance) as a function of income levels
+2. If we understand the structure and effect of the "noise" we can for on opinion of how
+much trust can be given to the results.
+
+
+
+# Data
+
+```{r plot_hist}
+wine %>% 
+  pivot_longer(cols = everything()) %>% 
+  ggplot(aes(x = value)) + 
+  geom_histogram() + 
+  facet_wrap(~name, scales = "free")
+
+```
+
+
+```{r plot_boxplot}
+
+wine %>% 
+  mutate(quality = as_factor(quality)) %>% 
+  pivot_longer(cols = -quality) %>%
+  ggplot(aes(x = value, y = quality)) + 
+  geom_boxplot() + 
+  facet_wrap(~name, scales = "free")
+
+```
+
+
+
+## Model
+
+```{r split_model}
+
+model_split = initial_split(wine,prop = 0.7, strata = quality)
+
+wine_train = model_split %>% 
+  training()
+
+wine_test = model_split %>% 
+  testing()
+
+```
+
+```{r fit_model}
+
+reg_model = linear_reg() %>%
+  set_engine("lm") %>%
+  fit(quality ~ .,wine_train)
+
+
+reg_model %>% 
+  broom::tidy()
+
+```
+
+```{r predict}
+
+reg_model %>% 
+  predict(wine_test) %>%
+  head()
+
+```
+
+```{r evaluate}
+
+reg_model %>%
+  predict(wine_test) %>% 
+  bind_cols(truth = wine_test$quality) %>% 
+  metrics(truth = truth, estimate = .pred)
+
+```
+
