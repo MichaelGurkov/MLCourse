@@ -20,6 +20,8 @@ library(tidymodels)
 
 wine = read_csv(here::here("data","winequality_red.csv"))
 
+heart = read_csv(here::here("data","heart.csv"))
+
 ```
 
 # Preface
@@ -42,7 +44,7 @@ much trust can be given to the results.
 
 # Data
 
-```{r plot_hist}
+```{r plot_hist_wine}
 wine %>% 
   pivot_longer(cols = everything()) %>% 
   ggplot(aes(x = value)) + 
@@ -52,7 +54,7 @@ wine %>%
 ```
 
 
-```{r plot_boxplot}
+```{r plot_boxplot_wine}
 
 wine %>% 
   mutate(quality = as_factor(quality)) %>% 
@@ -65,21 +67,25 @@ wine %>%
 
 
 
-## Model
+# Model
 
-```{r split_model}
+## Linear regression
 
-model_split = initial_split(wine,prop = 0.7, strata = quality)
 
-wine_train = model_split %>% 
+```{r split_lin_model}
+
+lin_model_split = initial_split(wine,prop = 0.7, strata = quality)
+
+wine_train = lin_model_split %>% 
   training()
 
-wine_test = model_split %>% 
+wine_test = lin_model_split %>% 
   testing()
 
 ```
 
-```{r fit_model}
+
+```{r fit_lin_model}
 
 reg_model = linear_reg() %>%
   set_engine("lm") %>%
@@ -91,7 +97,7 @@ reg_model %>%
 
 ```
 
-```{r predict}
+```{r predict_lin_model}
 
 reg_model %>% 
   predict(wine_test) %>%
@@ -99,7 +105,7 @@ reg_model %>%
 
 ```
 
-```{r evaluate}
+```{r evaluate_lin_model}
 
 reg_model %>%
   predict(wine_test) %>% 
@@ -108,3 +114,73 @@ reg_model %>%
 
 ```
 
+The main difference between confidence intervals and RMSE evaluation is that
+RMSE doesn't depended on the assumptions of the underlying DGP
+
+
+## Logistic regression
+
+Using linear regression for binary outcomes may produce predictions outside of
+[0,1] boundaries. Another side effect is that itcreates a 
+heteroscedasticity problem
+
+```{r plot_hist_heart}
+heart %>% 
+  pivot_longer(cols = everything()) %>% 
+  ggplot(aes(x = value)) + 
+  geom_histogram() + 
+  facet_wrap(~name, scales = "free")
+
+```
+
+
+```{r split_log_model}
+
+set.seed(100)
+
+log_model_split = initial_split(heart,prop = 0.7, strata = target)
+
+heart_train = log_model_split %>% 
+  training()
+
+heart_test = log_model_split %>% 
+  testing()
+
+```
+
+
+```{r fit_lin_heart_model}
+
+heart_lin_model = linear_reg() %>%
+  set_engine("lm") %>%
+  fit(target ~ .,heart_train)
+
+heart_lin_model %>% 
+  broom::tidy()
+
+```
+
+```{r predict_lin_heart_model}
+
+heart_lin_model %>% 
+  predict(heart_test) %>% 
+  pull(.pred) %>% 
+  range()
+
+```
+
+We can see that the prediction are indeed outside of [0,1] boundaries.
+
+```{r plot_roc_curve}
+
+heart_lin_model %>% 
+  predict(heart_test) %>% 
+  mutate(norm_pred = scales::rescale(.pred)) %>% 
+  bind_cols(target = heart_test$target) %>% 
+  mutate(target = factor(target, levels = c(1,0))) %>% 
+  select(truth = target,norm_pred) %>% 
+  roc_curve(truth = truth, norm_pred) %>% 
+  autoplot()
+
+
+```
