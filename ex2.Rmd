@@ -118,6 +118,7 @@ The main difference between confidence intervals and RMSE evaluation is that
 RMSE doesn't depended on the assumptions of the underlying DGP
 
 
+
 ## Logistic regression
 
 Using linear regression for binary outcomes may produce predictions outside of
@@ -169,9 +170,9 @@ heart_lin_model %>%
 
 ```
 
-We can see that the prediction are indeed outside of [0,1] boundaries.
+We can see that the predictions are indeed outside of [0,1] boundaries.
 
-```{r plot_roc_curve}
+```{r plot_lin_roc_curve}
 
 heart_lin_model %>% 
   predict(heart_test) %>% 
@@ -184,3 +185,28 @@ heart_lin_model %>%
 
 
 ```
+
+
+```{r fit_log_heart_model}
+
+heart_log_model = logistic_reg() %>% 
+  set_engine("glm") %>%
+  fit(target ~ .,heart_train %>% 
+        mutate(target = as_factor(target)))
+
+heart_log_model %>% 
+  broom::tidy()
+
+```
+
+```{r predict_log_heart_model}
+
+heart_log_model %>% 
+  predict(heart_test %>% 
+            mutate(target = as_factor(target)), type = "prob") %>% 
+  pull(.pred_1) %>% 
+  range()
+
+```
+
+We can see that the predictions of logistic model are within the [0,1] boundaries.
