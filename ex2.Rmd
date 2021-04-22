@@ -92,8 +92,7 @@ reg_model = linear_reg() %>%
   fit(quality ~ .,wine_train)
 
 
-reg_model %>% 
-  broom::tidy()
+reg_model %>%tidy()
 
 ```
 
@@ -161,6 +160,7 @@ heart_lin_rec = recipe(target ~ .,data = heart_train)
 
 ```
 
+
 ```{r models}
 
 heart_log_mod = logistic_reg() %>%
@@ -168,6 +168,11 @@ heart_log_mod = logistic_reg() %>%
 
 heart_lin_mod = linear_reg() %>%
   set_engine("lm")
+
+
+heart_ridge_mod = linear_reg(penalty = tune(),mixture = 0) %>%
+  set_engine("lm")
+
 
 ```
 
