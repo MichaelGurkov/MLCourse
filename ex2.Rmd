@@ -92,8 +92,7 @@ reg_model = linear_reg() %>%
   fit(quality ~ .,wine_train)
 
 
-reg_model %>% 
-  broom::tidy()
+reg_model %>%tidy()
 
 ```
 
@@ -147,23 +146,56 @@ heart_train = log_model_split %>%
 heart_test = log_model_split %>% 
   testing()
 
+
+
+
+```
+
+```{r recipes}
+
+heart_log_rec = recipe(target ~ .,data = heart_train) %>% 
+  step_mutate(target = factor(target, levels = c("1","0")))
+
+heart_lin_rec = recipe(target ~ .,data = heart_train)
+
+```
+
+
+
+
+```{r models}
+
+heart_log_mod = logistic_reg() %>%
+  set_engine("glm")
+
+heart_lin_mod = linear_reg() %>%
+  set_engine("lm")
+
+heart_ridge_mod = linear_reg(penalty = tune(),mixture = 0) %>%
+  set_engine("lm")
+
 ```
 
 
 ```{r fit_lin_heart_model}
 
-heart_lin_model = linear_reg() %>%
-  set_engine("lm") %>%
-  fit(target ~ .,heart_train)
+lin_mod_fit = workflow() %>% 
+  add_recipe(heart_lin_rec) %>% 
+  add_model(heart_lin_mod) %>% 
+  fit(heart_train)
 
-heart_lin_model %>% 
+
+
+lin_mod_fit %>% 
+  pull_workflow_fit() %>% 
   broom::tidy()
 
 ```
 
 ```{r predict_lin_heart_model}
 
-heart_lin_model %>% 
+lin_mod_fit %>% 
+  pull_workflow_fit() %>% 
   predict(heart_test) %>% 
   pull(.pred) %>% 
   range()
@@ -174,7 +206,8 @@ We can see that the predictions are indeed outside of [0,1] boundaries.
 
 ```{r plot_lin_roc_curve}
 
-heart_lin_model %>% 
+lin_mod_fit %>% 
+  pull_workflow_fit() %>% 
   predict(heart_test) %>% 
   mutate(norm_pred = scales::rescale(.pred)) %>% 
   bind_cols(target = heart_test$target) %>% 
@@ -189,24 +222,31 @@ heart_lin_model %>%
 
 ```{r fit_log_heart_model}
 
-heart_log_model = logistic_reg() %>% 
-  set_engine("glm") %>%
-  fit(target ~ .,heart_train %>% 
-        mutate(target = as_factor(target)))
+log_mod_fit = workflow() %>% 
+  add_recipe(heart_log_rec) %>% 
+  add_model(heart_log_mod) %>% 
+  fit(heart_train)
 
-heart_log_model %>% 
+
+log_mod_fit %>% 
+  pull_workflow_fit() %>% 
   broom::tidy()
 
 ```
 
 ```{r predict_log_heart_model}
 
-heart_log_model %>% 
-  predict(heart_test %>% 
-            mutate(target = as_factor(target)), type = "prob") %>% 
+log_mod_fit %>% 
+  pull_workflow_fit() %>%  
+  predict(heart_test, type = "prob") %>% 
   pull(.pred_1) %>% 
   range()
 
 ```
 
 We can see that the predictions of logistic model are within the [0,1] boundaries.
+
+
+
+
+## Ridge regression
