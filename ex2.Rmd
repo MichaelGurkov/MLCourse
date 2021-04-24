@@ -14,6 +14,8 @@ library(tidyverse)
 
 library(tidymodels)
 
+library(glmnet)
+
 ```
 
 ```{r load_data}
@@ -251,7 +253,7 @@ We can see that the predictions of logistic model are within the [0,1] boundarie
 
 ## Ridge regression
 
-```{r}
+```{r tidymodels_implementation}
 
 heart_ridge_mod = linear_reg(penalty = tune(),mixture = 0) %>%
   set_engine("glmnet")
@@ -273,6 +275,43 @@ ridge_cv %>%
   geom_errorbar(aes(ymin = mean - std_err, ymax = mean + std_err)) + 
   scale_x_log10()
 
+
+```
+
+```{r glmnet_implementation}
+
+glmnet_obj = glmnet(
+  x = heart_train %>%
+    select(-target) %>%
+    as.matrix(),
+  y = heart_train %>%
+    select(target) %>%
+    as.matrix(),
+  alpha = 0
+)
+
+glmnet_cv = cv.glmnet(
+  x = heart_train %>%
+    select(-target) %>%
+    as.matrix(),
+  y = heart_train %>%
+    select(target) %>%
+    as.matrix(),
+  alpha = 0
+)
+
+
+```
+
+```{r plot_glmnet_log_lambda_coeffs}
+
+plot(glmnet_obj,xvar = "lambda")
+
+```
+
+```{r plot_cv_glmnet}
+
+plot(glmnet_cv)
 
 ```
 
