@@ -14,6 +14,10 @@ library(tidyverse)
 
 library(tidymodels)
 
+library(glmnet)
+
+library(GGally)
+
 ```
 
 ```{r load_data}
@@ -119,6 +123,7 @@ RMSE doesn't depended on the assumptions of the underlying DGP
 
 
 
+
 ## Logistic regression
 
 Using linear regression for binary outcomes may produce predictions outside of
@@ -210,3 +215,136 @@ heart_log_model %>%
 ```
 
 We can see that the predictions of logistic model are within the [0,1] boundaries.
+
+
+
+## Regularization
+
+```{r fit_ridge_model}
+
+ridge_mod = glmnet(
+  x = heart_train %>%
+    select(-target) %>%
+    as.matrix(),
+  y = heart_train %>%
+    select(target) %>%
+    as.matrix(),
+  alpha = 0
+)
+ridge_cv = cv.glmnet(
+  x = heart_train %>%
+    select(-target) %>%
+    as.matrix(),
+  y = heart_train %>%
+    select(target) %>%
+    as.matrix(),
+  alpha = 0
+)
+
+
+```
+
+```{r plot_log_lambda_cv_coeffs}
+
+plot(ridge_mod, xvar = "lambda")
+
+```
+
+```{r plot_cv}
+
+plot(ridge_cv, alpha = 0)
+
+```
+
+```{r compare_coeffs}
+
+ridge_mod %>%
+  tidy() %>%
+  filter(step == max(step)) %>%
+  select(term, ridge = estimate) %>%
+  left_join(
+    heart_log_model %>%
+      tidy() %>%
+      select(term, logit = estimate),
+    by = "term") %>% 
+  pivot_longer(-term) %>%
+  ggplot(aes(x = term, y = value, fill = name)) +
+  scale_fill_viridis_d() + 
+  geom_col(position = "dodge") +
+  theme(legend.title = element_blank())
+
+
+```
+
+```{r predict}
+
+pred_results = predict(ridge_cv,
+        newx = heart_test %>%
+          select(-target) %>%
+          as.matrix(),
+        s = "lambda.min") %>%
+  as_tibble() %>%
+  set_names("min") %>%
+  cbind(
+    predict(
+      ridge_cv,
+      newx = heart_test %>%
+        select(-target) %>%
+        as.matrix(),
+      s = "lambda.1se"
+    ) %>%
+      as_tibble() %>%
+      set_names("se")
+  ) %>%
+  cbind(predict(heart_log_model, heart_test, type = "prob") %>%
+          select(logit = .pred_1))
+
+  
+pred_results %>% 
+  rownames_to_column() %>% 
+  pivot_longer(-rowname) %>% 
+  ggplot(aes(x = as.numeric(rowname), y = value, color = name)) + 
+  geom_point()
+    
+
+ggpairs(pred_results)
+
+```
+
+```{r min_conf_matrix}
+
+min_preds = predict(ridge_cv,
+        newx = heart_test %>%
+          select(-target) %>%
+          as.matrix(),
+        s = "lambda.min", type = "response") %>%
+  as_tibble() %>%
+  set_names("pred") %>% 
+  mutate(pred = factor(as.numeric(pred > 0.5), levels = c("1","0"))) %>% 
+  bind_cols(heart_test %>% 
+              mutate(truth = factor(target, levels = c(1,0))) %>% 
+              select(truth))
+
+caret::confusionMatrix(min_preds$pred,min_preds$truth)
+
+
+```
+
+```{r se_conf_matrix}
+
+se_preds = predict(ridge_cv,
+        newx = heart_test %>%
+          select(-target) %>%
+          as.matrix(),
+        s = "lambda.1se", type = "response") %>%
+  as_tibble() %>%
+  set_names("pred") %>% 
+  mutate(pred = factor(as.numeric(pred > 0.5), levels = c("1","0"))) %>% 
+  bind_cols(heart_test %>% 
+              mutate(truth = factor(target, levels = c(1,0))) %>% 
+              select(truth))
+
+caret::confusionMatrix(se_preds$pred,se_preds$truth)
+
+
+```
