@@ -30,25 +30,31 @@ heart = read_csv(here::here("data","heart.csv"))
 
 # Preface
 
-We can use the data for prediction without assumptions because we don't care about
-causality. If cigar smoking can predict better health I don't care that this is because
-cigar smokers are wealthy people who can afford better treatment.
+### Exercises
+
+1. We can use the data for prediction without assumptions because in that case
+we don't care much about causality. If cigar smoking can predict better health,we don't care that this is may be because cigar smokers are wealthy people who can afford better treatment.
 
 ## Separability
 
-The downside in adding interactions is that if we got the interaction wrong we'll cause overfitting.
+### Exercises
+
+1. The downside in adding interactions is that if we got the interaction wrong we'll cause overfitting.
 
 ## Normal distribution
+
+### Exercises
+
 1. Classical economist's stories such as consumption that is characterized by different
 dispersion (variance) as a function of income levels
-2. If we understand the structure and effect of the "noise" we can for on opinion of how
-much trust can be given to the results.
+2. If we understand the structure and effect of the "noise" we can form an
+opinion of how much trust can be given to the results.
 
 
 
 # Data
 
-```{r plot_hist_wine}
+```{r plot_hist_wine, fig.cap="Wine dataset histplot"}
 wine %>% 
   pivot_longer(cols = everything()) %>% 
   ggplot(aes(x = value)) + 
@@ -58,7 +64,7 @@ wine %>%
 ```
 
 
-```{r plot_boxplot_wine}
+```{r plot_boxplot_wine, fig.cap="Wine dataset boxplot"}
 
 wine %>% 
   mutate(quality = as_factor(quality)) %>% 
@@ -75,6 +81,7 @@ wine %>%
 
 ## Linear regression
 
+### Exercises
 
 ```{r split_lin_model}
 
@@ -88,6 +95,7 @@ wine_test = lin_model_split %>%
 
 ```
 
+2.
 
 ```{r fit_lin_model}
 
@@ -101,6 +109,8 @@ reg_model %>%
 
 ```
 
+3.
+
 ```{r predict_lin_model}
 
 reg_model %>% 
@@ -108,6 +118,8 @@ reg_model %>%
   head()
 
 ```
+
+4.
 
 ```{r evaluate_lin_model}
 
@@ -119,18 +131,22 @@ reg_model %>%
 ```
 
 The main difference between confidence intervals and RMSE evaluation is that
-RMSE doesn't depended on the assumptions of the underlying DGP
+RMSE doesn't depended on the assumptions of the underlying DGP.
 
 
 
 
 ## Logistic regression
 
-Using linear regression for binary outcomes may produce predictions outside of
-[0,1] boundaries. Another side effect is that itcreates a 
-heteroscedasticity problem
+### Exersices
 
-```{r plot_hist_heart}
+1. Using linear regression for binary outcomes may produce predictions outside of
+[0,1] boundaries. Another side effect is that creates a heteroscedasticity
+problem
+
+2.
+
+```{r plot_hist_heart, fig.cap="heart dataset histplot"}
 heart %>% 
   pivot_longer(cols = everything()) %>% 
   ggplot(aes(x = value)) + 
@@ -138,7 +154,10 @@ heart %>%
   facet_wrap(~name, scales = "free")
 
 ```
+ 
+### Linear regression
 
+#### Exercises
 
 ```{r split_log_model}
 
@@ -154,7 +173,7 @@ heart_test = log_model_split %>%
 
 ```
 
-
+2. 
 ```{r fit_lin_heart_model}
 
 heart_lin_model = linear_reg() %>%
@@ -166,6 +185,8 @@ heart_lin_model %>%
 
 ```
 
+3.
+
 ```{r predict_lin_heart_model}
 
 heart_lin_model %>% 
@@ -176,6 +197,8 @@ heart_lin_model %>%
 ```
 
 We can see that the predictions are indeed outside of [0,1] boundaries.
+
+4. 
 
 ```{r plot_lin_roc_curve}
 
@@ -191,6 +214,11 @@ heart_lin_model %>%
 
 ```
 
+### Logistic regression
+
+#### Exercises
+
+1.
 
 ```{r fit_log_heart_model}
 
@@ -203,6 +231,8 @@ heart_log_model %>%
   broom::tidy()
 
 ```
+
+2.
 
 ```{r predict_log_heart_model}
 
@@ -217,8 +247,20 @@ heart_log_model %>%
 We can see that the predictions of logistic model are within the [0,1] boundaries.
 
 
-
 ## Regularization
+
+### Exercises
+
+1. Using an absolute (or squared term) in the penalty is required to ignore
+the sign of the coefficients. In case the sign is taken
+into account negative coefficients with be (inappropriately) rewarded.
+
+2. This is a feature of the loss function. Absolute distance that is used in
+lasso allows for "corner" solutions as opposed to quadratic distance used in
+ridge
+
+### Exercises
+
 
 ```{r fit_ridge_model}
 
@@ -244,17 +286,23 @@ ridge_cv = cv.glmnet(
 
 ```
 
+1. 
+
 ```{r plot_log_lambda_cv_coeffs}
 
 plot(ridge_mod, xvar = "lambda")
 
 ```
 
+2.
+
 ```{r plot_cv}
 
 plot(ridge_cv, alpha = 0)
 
 ```
+
+3. 
 
 ```{r compare_coeffs}
 
@@ -275,6 +323,13 @@ ridge_mod %>%
 
 
 ```
+
+We can see that ridge produces smaller (in absolute value) coeffs.
+
+4. Perhaps the problem is that if we have a covariate that has no effect it
+suggests that the economic model was misspecified?
+
+5. 
 
 ```{r predict}
 
@@ -300,16 +355,13 @@ pred_results = predict(ridge_cv,
           select(logit = .pred_1))
 
   
-pred_results %>% 
-  rownames_to_column() %>% 
-  pivot_longer(-rowname) %>% 
-  ggplot(aes(x = as.numeric(rowname), y = value, color = name)) + 
-  geom_point()
-    
 
 ggpairs(pred_results)
 
 ```
+6.
+
+Min lambda  conf matrix 
 
 ```{r min_conf_matrix}
 
@@ -329,6 +381,8 @@ caret::confusionMatrix(min_preds$pred,min_preds$truth)
 
 
 ```
+
+One se lambda  conf matrix 
 
 ```{r se_conf_matrix}
 
