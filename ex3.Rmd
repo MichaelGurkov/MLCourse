@@ -1,0 +1,90 @@
+---
+title: "Homework3"
+---
+
+```{r include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE, message = FALSE)
+
+```
+
+```{r load_libraries}
+
+library(tidyverse)
+
+library(tidymodels)
+
+
+```
+
+```{r load_data}
+
+heart = read_csv(here::here("data","heart.csv"))
+
+```
+
+```{r split_train_test}
+
+set.seed(167)
+
+heart_split = initial_split(heart)
+
+train_heart = training(heart_split)
+
+test_heart = testing(heart_split)
+
+```
+
+
+```{r set_wf}
+
+heart_recipe = recipe(target ~ sex + cp + chol, data = train_heart) %>% 
+  step_mutate(target = factor(target, levels = c(0,1)))
+
+heart_model = decision_tree(mode = "classification") %>% 
+  set_engine("rpart")
+
+restricted_heart_model = decision_tree(mode = "classification",min_n = 2) %>% 
+  set_engine("rpart")
+
+heart_wf = workflow() %>% 
+  add_recipe(heart_recipe) %>% 
+  add_model(heart_model)
+
+
+```
+
+```{r estimate}
+
+tree_mod = heart_wf %>% 
+  fit(train_heart)
+
+
+restricted_tree_mod = heart_wf %>% 
+  update_model(restricted_heart_model) %>% 
+  fit(train_heart)
+
+
+```
+
+
+```{r plot_tree}
+
+fancyRpartPlot(tree_model, caption = NULL)
+
+```
+
+
+```{r compare_model_restrictions}
+
+restricted_tree_model = rpart(formula = formula_part,data = train_heart,
+                       method = "class",minsplit = 2,minbucket = 1)
+
+prune_tree_model = rpart(formula = formula_part,data = train_heart,
+                       method = "class",cp = 0.03)
+
+printcp(tree_model)
+
+printcp(restricted_tree_model)
+
+```
