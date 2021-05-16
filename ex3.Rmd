@@ -14,6 +14,10 @@ library(tidyverse)
 
 library(tidymodels)
 
+library(baguette)
+
+library(caret)
+
 
 ```
 
@@ -21,25 +25,28 @@ library(tidymodels)
 
 heart = read_csv(here::here("data","heart.csv"))
 
+df = heart %>% 
+  mutate(target = factor(target, levels = c(1,0)))
+
 ```
 
 ```{r split_train_test}
 
 set.seed(167)
 
-heart_split = initial_split(heart)
+data_split = initial_split(df)
 
-train_heart = training(heart_split)
+train_set = training(data_split)
 
-test_heart = testing(heart_split)
+test_set = testing(data_split)
 
 ```
 
+# Trees
 
 ```{r set_wf}
 
-heart_recipe = recipe(target ~ sex + cp + chol, data = train_heart) %>% 
-  step_mutate(target = factor(target, levels = c(0,1)))
+heart_recipe = recipe(target ~ sex + cp + chol, data = train_set)
 
 heart_model = decision_tree(mode = "classification") %>% 
   set_engine("rpart")
@@ -57,12 +64,12 @@ heart_wf = workflow() %>%
 ```{r estimate}
 
 tree_mod = heart_wf %>% 
-  fit(train_heart)
+  fit(train_set)
 
 
 restricted_tree_mod = heart_wf %>% 
   update_model(restricted_heart_model) %>% 
-  fit(train_heart)
+  fit(train_set)
 
 
 ```
@@ -77,10 +84,10 @@ fancyRpartPlot(tree_model, caption = NULL)
 
 ```{r compare_model_restrictions}
 
-restricted_tree_model = rpart(formula = formula_part,data = train_heart,
+restricted_tree_model = rpart(formula = formula_part,data = train_set,
                        method = "class",minsplit = 2,minbucket = 1)
 
-prune_tree_model = rpart(formula = formula_part,data = train_heart,
+prune_tree_model = rpart(formula = formula_part,data = train_set,
                        method = "class",cp = 0.03)
 
 printcp(tree_model)
@@ -88,3 +95,89 @@ printcp(tree_model)
 printcp(restricted_tree_model)
 
 ```
+
+# Forests
+
+```{r cross_validation}
+
+rep_cv = vfold_cv(train_set,v = 5, repeats = 3)
+
+```
+
+
+```{r knn}
+
+knn_model = nearest_neighbor(neighbors = tune()) %>% 
+  set_engine("kknn") %>% 
+  set_mode("classification")
+
+
+knn_tune = tune_grid(
+  object = heart_wf %>%
+    update_model(knn_model),
+  resamples = rep_cv,
+  grid = grid_regular(neighbors(), levels = 10)
+)
+
+knn_tune %>% 
+  collect_metrics() %>% 
+  filter(.metric == "accuracy") %>% 
+  ggplot(aes(x = neighbors, y = mean)) + 
+  geom_line() + 
+  geom_point() + 
+  ylab(NULL) + ggtitle("Accuracy as function of neighbors") + 
+  scale_x_continuous(breaks = 1:10)
+
+```
+
+```{r bagging}
+
+bag_model = heart_wf %>% 
+  update_model(bag_tree(mode = "classification")) %>% 
+  fit(train_set)
+
+```
+
+
+
+```{r rf}
+
+rf_model = rand_forest(trees = tune()) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+
+rf_tune = tune_grid(
+  object = heart_wf %>%
+    update_model(knn_model),
+  resamples = rep_cv,
+  grid = grid_regular(neighbors(), levels = 10)
+)
+
+knn_tune %>% 
+  collect_metrics() %>% 
+  filter(.metric == "accuracy") %>% 
+  ggplot(aes(x = neighbors, y = mean)) + 
+  geom_line() + 
+  geom_point() + 
+  ylab(NULL) + ggtitle("Accuracy as function of neighbors") + 
+  scale_x_continuous(breaks = 1:10)
+
+
+```
+
+
+
+```{r knn_caret}
+
+fitControl = trainControl(method = "repeatedcv",number = 5,repeats = 3)
+
+temp = train(
+  x = select(train_set, -target),
+  y = pull(train_set, target),
+  method = "knn",
+  trControl = fitControl
+)
+
+```
+
