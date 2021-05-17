@@ -139,6 +139,16 @@ bag_model = heart_wf %>%
 ```
 
 
+```{r boosting}
+
+boost_model = heart_wf %>% 
+  update_model(boost_tree(mode = "classification") %>% 
+                 set_engine("C5.0")) %>% 
+  fit(train_set)
+
+```
+
+
 
 ```{r rf}
 
