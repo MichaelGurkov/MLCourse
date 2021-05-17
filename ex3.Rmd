@@ -149,10 +149,17 @@ bag_model = heart_wf %>%
 
 ```{r boosting}
 
-boost_model = heart_wf %>% 
-  update_model(boost_tree(mode = "classification") %>% 
-                 set_engine("C5.0")) %>% 
-  fit(train_set)
+boost_model = boost_tree(tree_depth = tune(),trees = tune()) %>% 
+  set_mode("classification") %>% 
+  set_engine("xgboost")
+
+boost_tune = une_grid(
+  object = workflow() %>% 
+    add_formula(target ~ .) %>% 
+    add_model(boost_model),
+  resamples = rep_cv,
+  grid = grid_regular(tree_depth(), trees())
+)
 
 ```
 
