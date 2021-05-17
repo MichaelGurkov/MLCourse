@@ -51,7 +51,7 @@ heart_recipe = recipe(target ~ sex + cp + chol, data = train_set)
 heart_model = decision_tree(mode = "classification") %>% 
   set_engine("rpart")
 
-restricted_heart_model = decision_tree(mode = "classification",min_n = 2) %>% 
+restricted_heart_model = decision_tree(mode = "classification", min_n = 2) %>%
   set_engine("rpart")
 
 heart_wf = workflow() %>% 
@@ -98,6 +98,14 @@ printcp(restricted_tree_model)
 
 # Forests
 
+```{r update_formula}
+
+heart_wf  = heart_wf %>% 
+  update_formula(target ~ .)
+
+```
+
+
 ```{r cross_validation}
 
 rep_cv = vfold_cv(train_set,v = 5, repeats = 3)
@@ -130,7 +138,7 @@ knn_tune %>%
 
 ```
 
-```{r bagging}
+```{r bagging, eval=FALSE}
 
 bag_model = heart_wf %>% 
   update_model(bag_tree(mode = "classification")) %>% 
@@ -152,26 +160,38 @@ boost_model = heart_wf %>%
 
 ```{r rf}
 
-rf_model = rand_forest(trees = tune()) %>%
+rf_model = rand_forest(mtry = tune()) %>%
   set_engine("ranger") %>%
   set_mode("classification")
 
 
 rf_tune = tune_grid(
-  object = heart_wf %>%
-    update_model(knn_model),
+  object = workflow() %>% 
+    add_formula(target ~ .) %>% 
+    add_model(rf_model),
   resamples = rep_cv,
-  grid = grid_regular(neighbors(), levels = 10)
+  grid = grid_regular(mtry(range = c(1,13)))
 )
 
-knn_tune %>% 
-  collect_metrics() %>% 
-  filter(.metric == "accuracy") %>% 
-  ggplot(aes(x = neighbors, y = mean)) + 
+
+
+```
+
+```{r plot_rf_tune}
+
+rf_tune %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  ggplot(aes(x = mtry, y = mean)) +
+  geom_point() +
   geom_line() + 
-  geom_point() + 
-  ylab(NULL) + ggtitle("Accuracy as function of neighbors") + 
-  scale_x_continuous(breaks = 1:10)
+  # geom_errorbar(aes(
+  #   x = mtry,
+  #   ymin = mean - std_err,
+  #   ymax = mean + std_err
+  # ),width = 2) + 
+  ylab(NULL) + xlab("Number of predictors") + 
+  ggtitle("Accuracy as a function of predictors")
 
 
 ```
