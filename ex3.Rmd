@@ -12,10 +12,6 @@ knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE, message = FA
 
 library(tidyverse)
 
-library(tidymodels)
-
-library(baguette)
-
 library(caret)
 
 
@@ -34,185 +30,97 @@ df = heart %>%
 
 set.seed(167)
 
-data_split = initial_split(df)
+split_ind = createDataPartition(heart$target, list = FALSE)
 
-train_set = training(data_split)
+train_set = heart[split_ind,]
 
-test_set = testing(data_split)
-
-```
-
-# Trees
-
-```{r set_wf}
-
-heart_recipe = recipe(target ~ sex + cp + chol, data = train_set)
-
-heart_model = decision_tree(mode = "classification") %>% 
-  set_engine("rpart")
-
-restricted_heart_model = decision_tree(mode = "classification", min_n = 2) %>%
-  set_engine("rpart")
-
-heart_wf = workflow() %>% 
-  add_recipe(heart_recipe) %>% 
-  add_model(heart_model)
+test_set = heart[-split_ind,]
 
 
 ```
 
-```{r estimate}
+```{r set_formula}
 
-tree_mod = heart_wf %>% 
-  fit(train_set)
+formula_part = target ~ sex + cp + chol
+formula_full = target ~ .
 
+```
 
-restricted_tree_mod = heart_wf %>% 
-  update_model(restricted_heart_model) %>% 
-  fit(train_set)
+```{r fit_rpart_tree}
+
+rpart_tree = rpart::rpart(formula = formula_part,
+                          data = heart, method = "class")
+
+rattle::fancyRpartPlot(rpart_tree, caption = NULL)
 
 
 ```
 
+```{r restriction_comparison}
 
-```{r plot_tree}
+unres_model = rpart::rpart(formula = formula_full,
+                          data = heart, method = "class")
 
-fancyRpartPlot(tree_model, caption = NULL)
+res_model = rpart::rpart(formula = formula_full,
+                          data = heart, method = "class",
+                         minsplit = 2, minbucket = 1)
 
-```
 
-
-```{r compare_model_restrictions}
-
-restricted_tree_model = rpart(formula = formula_part,data = train_set,
-                       method = "class",minsplit = 2,minbucket = 1)
-
-prune_tree_model = rpart(formula = formula_part,data = train_set,
-                       method = "class",cp = 0.03)
-
-printcp(tree_model)
-
-printcp(restricted_tree_model)
 
 ```
+
 
 # Forests
 
-```{r update_formula}
+```{r cv}
 
-heart_wf  = heart_wf %>% 
-  update_formula(target ~ .)
-
-```
-
-
-```{r cross_validation}
-
-rep_cv = vfold_cv(train_set,v = 5, repeats = 3)
+fitControl = trainControl(method = "repeatedcv",number = 5,repeats = 3)
 
 ```
 
 
 ```{r knn}
 
-knn_model = nearest_neighbor(neighbors = tune()) %>% 
-  set_engine("kknn") %>% 
-  set_mode("classification")
-
-
-knn_tune = tune_grid(
-  object = heart_wf %>%
-    update_model(knn_model),
-  resamples = rep_cv,
-  grid = grid_regular(neighbors(), levels = 10)
+knn_model = train(
+  x = select(train_set, -target),
+  y = factor(train_set$target, levels = c("1","0")),
+  method = "knn",
+  trControl = fitControl
 )
-
-knn_tune %>% 
-  collect_metrics() %>% 
-  filter(.metric == "accuracy") %>% 
-  ggplot(aes(x = neighbors, y = mean)) + 
-  geom_line() + 
-  geom_point() + 
-  ylab(NULL) + ggtitle("Accuracy as function of neighbors") + 
-  scale_x_continuous(breaks = 1:10)
 
 ```
 
-```{r bagging, eval=FALSE}
 
-bag_model = heart_wf %>% 
-  update_model(bag_tree(mode = "classification")) %>% 
-  fit(train_set)
+```{r bagging}
+
+bag_model = train(
+  x = select(train_set, -target),
+  y = factor(train_set$target, levels = c("1","0")),
+  method = "ada",
+  trControl = fitControl
+)
 
 ```
 
 
 ```{r boosting}
 
-boost_model = boost_tree(tree_depth = tune(),trees = tune()) %>% 
-  set_mode("classification") %>% 
-  set_engine("xgboost")
-
-boost_tune = une_grid(
-  object = workflow() %>% 
-    add_formula(target ~ .) %>% 
-    add_model(boost_model),
-  resamples = rep_cv,
-  grid = grid_regular(tree_depth(), trees())
-)
-
-```
-
-
-
-```{r rf}
-
-rf_model = rand_forest(mtry = tune()) %>%
-  set_engine("ranger") %>%
-  set_mode("classification")
-
-
-rf_tune = tune_grid(
-  object = workflow() %>% 
-    add_formula(target ~ .) %>% 
-    add_model(rf_model),
-  resamples = rep_cv,
-  grid = grid_regular(mtry(range = c(1,13)))
-)
-
-
-
-```
-
-```{r plot_rf_tune}
-
-rf_tune %>%
-  collect_metrics() %>%
-  filter(.metric == "accuracy") %>%
-  ggplot(aes(x = mtry, y = mean)) +
-  geom_point() +
-  geom_line() + 
-  # geom_errorbar(aes(
-  #   x = mtry,
-  #   ymin = mean - std_err,
-  #   ymax = mean + std_err
-  # ),width = 2) + 
-  ylab(NULL) + xlab("Number of predictors") + 
-  ggtitle("Accuracy as a function of predictors")
-
-
-```
-
-
-
-```{r knn_caret}
-
-fitControl = trainControl(method = "repeatedcv",number = 5,repeats = 3)
-
-temp = train(
+boost_model = train(
   x = select(train_set, -target),
-  y = pull(train_set, target),
-  method = "knn",
+  y = factor(train_set$target, levels = c("1","0")),
+  method = "gbm",
+  trControl = fitControl
+)
+
+```
+
+
+```{r random_forest}
+
+rf_model = train(
+  x = select(train_set, -target),
+  y = factor(train_set$target, levels = c("1","0")),
+  method = "rf",
   trControl = fitControl
 )
 
