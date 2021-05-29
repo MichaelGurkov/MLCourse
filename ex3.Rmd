@@ -14,6 +14,8 @@ library(tidyverse)
 
 library(caret)
 
+library(DALEX)
+
 
 ```
 
@@ -30,7 +32,7 @@ df = heart %>%
 
 set.seed(167)
 
-split_ind = createDataPartition(heart$target, list = FALSE)
+split_ind = createDataPartition(heart$target, list = FALSE, p = 2 / 3)
 
 train_set = heart[split_ind,]
 
@@ -49,7 +51,7 @@ formula_full = target ~ .
 ```{r fit_rpart_tree}
 
 rpart_tree = rpart::rpart(formula = formula_part,
-                          data = heart, method = "class")
+                          data = train_set, method = "class")
 
 rattle::fancyRpartPlot(rpart_tree, caption = NULL)
 
@@ -59,15 +61,78 @@ rattle::fancyRpartPlot(rpart_tree, caption = NULL)
 ```{r restriction_comparison}
 
 unres_model = rpart::rpart(formula = formula_full,
-                          data = heart, method = "class")
+                          data = train_set, method = "class")
 
 res_model = rpart::rpart(formula = formula_full,
-                          data = heart, method = "class",
+                          data = train_set, method = "class",
                          minsplit = 2, minbucket = 1)
 
+get_used_vars = function(temp_model){
+  frame = temp_model$frame
+  leaves = frame$var == "<leaf>"
+  used = unique(frame$var[!leaves])
+  return(used)
+}
+
+unres_vars = get_used_vars(unres_model)
+
+res_vars = get_used_vars(res_model)
 
 
 ```
+
+The restricted model used `r length(res_vars)` variables while the default model used `r length(unres_vars)` variables. That makes sense because the default model is actualy more restricted and doesn't allow small splits.
+
+
+Train set confusion matrix
+
+```{r train_prediction}
+
+confusionMatrix(predict(unres_model, train_set, type = "class"),
+                factor(train_set$target, levels = c(0,1)))
+
+```
+
+
+Test set confusion matrix
+
+```{r test_prediction}
+
+confusionMatrix(predict(unres_model, test_set, type = "class"),
+                factor(test_set$target, levels = c(0,1)))
+
+```
+
+We can see that prediction based on the train set are more accurate (0.84 vs 0.8). 
+
+```{r prune_tree}
+
+prune_model = rpart::prune(unres_model, cp = 0.03)
+
+
+```
+
+
+Train set confusion matrix for pruned tree
+
+```{r train_prediction_prune}
+
+confusionMatrix(predict(prune_model, train_set, type = "class"),
+                factor(train_set$target, levels = c(0,1)))
+
+```
+
+
+Test set confusion matrix for pruned tree
+
+```{r test_prediction_prune}
+
+confusionMatrix(predict(prune_model, test_set, type = "class"),
+                factor(test_set$target, levels = c(0,1)))
+
+```
+
+We can see that prediction based on the train set are more accurate (0.84 vs 0.8). 
 
 
 # Forests
@@ -81,12 +146,16 @@ fitControl = trainControl(method = "repeatedcv",number = 5,repeats = 3)
 
 ```{r knn}
 
+set.seed(167)
+
 knn_model = train(
   x = select(train_set, -target),
-  y = factor(train_set$target, levels = c("1","0")),
+  y = train_set$target,
   method = "knn",
   trControl = fitControl
 )
+
+ggplot(knn_model)
 
 ```
 
@@ -95,10 +164,12 @@ knn_model = train(
 
 bag_model = train(
   x = select(train_set, -target),
-  y = factor(train_set$target, levels = c("1","0")),
+  y = factor(train_set$target, levels = c(0,1)),
   method = "ada",
   trControl = fitControl
 )
+
+ggplot(bag_model)
 
 ```
 
@@ -107,12 +178,33 @@ bag_model = train(
 
 boost_model = train(
   x = select(train_set, -target),
-  y = factor(train_set$target, levels = c("1","0")),
+  y = factor(train_set$target, levels = c(0,1)),
   method = "gbm",
   trControl = fitControl
 )
 
+ggplot(boost_model)
+
 ```
+
+```{r boosting_with_grid}
+
+boost_model_grid = train(
+  x = select(train_set, -target),
+  y = factor(train_set$target, levels = c(0,1)),
+  method = "gbm",
+  trControl = fitControl,
+  tuneGrid = expand.grid(interaction.depth = c(1, 5, 9),
+                          n.trees = (1:30)*50,
+                          shrinkage = 0.1,
+                          n.minobsinnode = 20)
+)
+
+
+gridExtra::grid.arrange(ggplot(boost_model), ggplot(boost_model_grid))
+
+```
+
 
 
 ```{r random_forest}
@@ -123,6 +215,15 @@ rf_model = train(
   method = "rf",
   trControl = fitControl
 )
+
+```
+
+# Interpretability
+
+```{r gbm_explainer}
+
+gdm_explainer = explain(boost_model, data = select(train_set, -target),
+                        y = train_set$target)
 
 ```
 
