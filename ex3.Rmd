@@ -218,12 +218,60 @@ rf_model = train(
 
 ```
 
+
 # Interpretability
 
-```{r gbm_explainer}
+```{r explainers}
 
-gdm_explainer = explain(boost_model, data = select(train_set, -target),
+boosting_explainer = explain(boost_model, data = select(train_set, -target),
+                        y = train_set$target)
+
+bagging_explainer = explain(bag_model, data = select(train_set, -target),
+                        y = train_set$target)
+
+rf_explainer = explain(rf_model, data = select(train_set, -target),
+                        y = train_set$target)
+
+knn_explainer = explain(knn_model, data = select(train_set, -target),
                         y = train_set$target)
 
 ```
+
+```{r model_performance}
+
+plot(model_performance(boosting_explainer))
+
+plot(model_performance(bagging_explainer))
+
+plot(model_performance(knn_explainer))
+
+plot(model_performance(rf_explainer))
+
+```
+
+```{r variable_importance}
+
+plot(variable_importance(boosting_explainer))
+
+plot(variable_importance(bagging_explainer))
+
+plot(variable_importance(knn_explainer))
+
+plot(variable_importance(rf_explainer))
+
+```
+
+```{r model_profile}
+
+plot(model_profile(boosting_explainer))
+
+plot(model_profile(bagging_explainer))
+
+plot(model_profile(knn_explainer))
+
+plot(model_profile(rf_explainer))
+
+
+```
+
 
