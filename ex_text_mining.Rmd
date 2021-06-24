@@ -1,0 +1,127 @@
+---
+title: "Text Mining"
+---
+
+```{r include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE, message = FALSE)
+
+```
+
+```{r load_libraries}
+
+library(tidyverse)
+
+library(tidytext)
+
+library(gutenbergr)
+
+
+
+```
+
+```{r load_data, cache=TRUE}
+
+mark_twain = gutenberg_works(author == "Twain, Mark")
+
+lewis_carroll = gutenberg_works(author == "Carroll, Lewis")
+
+corpus_metadata = gutenberg_metadata %>%
+  filter(
+    title %in% c(
+      "Alice’s Adventures in Wonderland",
+      "Through the Looking-Glass",
+      "The Adventures of Tom Sawyer",
+      "Adventures of Huckleberry Finn",
+      "A Connecticut Yankee in King Arthur’s Court",
+      "The Innocents Abroad",
+      "The Count of Monte Cristo, Illustrated"
+    )
+  ) %>% 
+  filter(has_text == TRUE) %>% 
+  select(gutenberg_id,author, title)
+
+corpus = gutenberg_download(gutenberg_id = corpus_metadata$gutenberg_id,
+                            mirror = "http://aleph.gutenberg.org/")
+
+data("stop_words")
+
+```
+
+```{r tokenize_corpus}
+
+tokenized_corpus = corpus %>% 
+  unnest_tokens(word, text) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  left_join(corpus_metadata, by = "gutenberg_id")
+
+
+```
+
+```{r plot_twains_most_popular}
+
+tokenized_corpus %>% 
+  filter(author == "Twain, Mark") %>% 
+  count(word,sort = TRUE) %>% 
+  slice(1:15) %>% 
+  ggplot(aes(x = reorder(word,n), y = n)) + 
+  geom_col() + 
+  coord_flip() + 
+  xlab(NULL) + ylab(NULL)
+
+```
+
+```{r frequency} 
+
+frequency = tokenized_corpus %>% 
+  mutate(word = str_extract(word,pattern = "[a-z']+")) %>%
+  count(word, author) %>% 
+  group_by(author) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  select(-n) %>% 
+  pivot_wider(names_from = "author",values_from = "proportion") %>% 
+  pivot_longer(cols = c("Dumas, Alexandre","Carroll, Lewis"),
+               names_to = "author", values_to = "proportion")
+  
+
+```
+
+```{r plot_writing_style}
+
+frequency %>% 
+  rename(mark =`Twain, Mark`) %>% 
+  ggplot(aes(x = proportion, y = mark, color = abs(mark - proportion))) + 
+  geom_abline(color = "red", linetype = "dashed") +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+  facet_wrap(~author, ncol = 2) +
+  theme(legend.position="none") +
+  labs(y = "Mark Twain", x = NULL)
+
+```
+
+# Sentiment analysis
+
+```{r twain_books}
+
+twain_books = tokenized_corpus %>% 
+  filter(author == "Twain, Mark") %>% 
+  group_by(gutenberg_id) %>% 
+  mutate(line_number = row_number(),
+         chapter = cumsum(as.numeric(str_detect(word, regex("^chapter [\\divxlc]",
+                                                 ignore_case = TRUE))))) %>% 
+  ungroup()
+
+```
+
+
+```{r}
+
+joy_words = get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+```
+
