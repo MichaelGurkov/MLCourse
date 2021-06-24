@@ -187,6 +187,7 @@ ggplot(boost_model)
 
 ```
 
+
 ```{r boosting_with_grid}
 
 boost_model_grid = train(
@@ -217,6 +218,7 @@ rf_model = train(
 )
 
 ```
+
 
 
 # Interpretability
@@ -274,4 +276,28 @@ plot(model_profile(rf_explainer))
 
 ```
 
+```{r model_break_down}
+
+plot(predict_parts_break_down(knn_explainer, slice(train_set,1)))
+
+plot(predict_parts_break_down(rf_explainer, slice(train_set,1)))
+
+plot(predict_parts_break_down(bagging_explainer, slice(train_set,1)))
+
+plot(predict_parts_break_down(boosting_explainer, slice(train_set,1)))
+
+
+```
+
+```{r prediction}
+
+predict(knn_model, test_set)
+
+predict(rf_model, test_set)
+
+predict(bag_model, test_set)
+
+predict(boost_model, test_set)
+
+```
 
