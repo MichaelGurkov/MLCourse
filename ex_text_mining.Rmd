@@ -16,6 +16,12 @@ library(tidytext)
 
 library(gutenbergr)
 
+library(ggraph)
+
+library(igraph)
+
+library(topicmodels)
+
 
 
 ```
@@ -82,6 +88,19 @@ frequency = tokenized_corpus %>%
   pivot_wider(names_from = "author",values_from = "proportion") %>% 
   pivot_longer(cols = c("Dumas, Alexandre","Carroll, Lewis"),
                names_to = "author", values_to = "proportion")
+
+
+ggplot(frequency,
+       aes(x = proportion, y = `Twain, Mark`, color = abs(`Twain, Mark` - proportion))) +
+  geom_abline(color = "gray40", lty = 2) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = scales::percent_format()) +
+  scale_y_log10(labels = scales::percent_format()) +
+  scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+  facet_wrap(~author, ncol = 2) +
+  theme(legend.position="none") +
+  labs(y = "Mark Twain", x = NULL)
   
 
 ```
@@ -107,21 +126,223 @@ frequency %>%
 
 ```{r twain_books}
 
-twain_books = tokenized_corpus %>% 
+twains_id = corpus_metadata %>% 
   filter(author == "Twain, Mark") %>% 
+  pull(gutenberg_id)
+
+twain_books = corpus %>% 
+  filter(gutenberg_id %in% twains_id) %>% 
   group_by(gutenberg_id) %>% 
   mutate(line_number = row_number(),
-         chapter = cumsum(as.numeric(str_detect(word, regex("^chapter [\\divxlc]",
+         chapter = cumsum(as.numeric(str_detect(text, regex("^chapter [\\divxlc]",
                                                  ignore_case = TRUE))))) %>% 
-  ungroup()
+  ungroup() %>% 
+  unnest_tokens(word, text)
 
 ```
 
 
-```{r}
+```{r joy_words_top_15}
 
 joy_words = get_sentiments("nrc") %>% 
   filter(sentiment == "joy")
+
+twain_books %>% 
+  filter(gutenberg_id == 74) %>% 
+  inner_join(joy_words) %>% 
+  count(word, sort = TRUE) %>% 
+  slice(1:15)
+
+```
+
+
+```{r mark_twain_sentiment}
+
+mark_twain_sentiment = twain_books %>% 
+  inner_join(get_sentiments("bing"), by = "word") %>% 
+  count(gutenberg_id, index = line_number %/% 80, sentiment) %>% 
+  pivot_wider(names_from = sentiment,values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+mark_twain_sentiment %>% 
+  mutate(gutenberg_id = factor(gutenberg_id,
+                               levels = corpus_metadata %>% 
+                                 filter(author == "Twain, Mark") %>% 
+                                 pull(gutenberg_id),
+                               labels = corpus_metadata %>% 
+                                 filter(author == "Twain, Mark") %>% 
+                                 pull(title))) %>% 
+  ggplot(aes(x = index, y = sentiment, fill = gutenberg_id)) + 
+  geom_col() + 
+  facet_wrap(~gutenberg_id, scales = "free") + 
+  theme(legend.position = "none") + 
+  xlab(NULL) + ylab(NULL)
+
+```
+
+```{r hack_finn}
+
+hack_finn = twain_books %>%
+filter(gutenberg_id == 76)
+
+
+temp = map(list("bing", "nrc"), function(temp_dict){
+  
+  temp_df = hack_finn %>% 
+    inner_join(get_sentiments(temp_dict), by = "word") %>% 
+    filter(sentiment %in% c("positive","negative")) %>% 
+    count(gutenberg_id, index = line_number %/% 80, sentiment) %>% 
+    pivot_wider(names_from = sentiment,values_from = n, values_fill = 0) %>% 
+    mutate(sentiment = positive - negative) %>% 
+    rename(!!temp_dict := last_col())
+  
+  
+  return(temp_df)
+  
+}) %>% 
+  reduce(inner_join, by = c("gutenberg_id", "index"))
+
+temp %>% 
+  pivot_longer(cols = c("bing","nrc")) %>% 
+  ggplot(aes(x = index, y = value, fill = name)) + 
+  geom_col() + 
+  facet_wrap(~name, scales = "free") + 
+  theme(legend.position = "none") + 
+  xlab(NULL) + ylab(NULL)
+
+```
+
+
+
+## ngrams
+
+```{r mark_twain_bigrams}
+
+twain_bigrams = corpus %>% 
+  filter(gutenberg_id %in% corpus_metadata$gutenberg_id[
+    corpus_metadata$author == "Twain, Mark"]) %>% 
+  unnest_tokens(bigram, text,token = "ngrams", n = 2)
+
+twain_bigrams %>% 
+  count(bigram, sort = TRUE) %>% 
+  slice(1:15)
+
+twain_bigrams %>% 
+  filter(complete.cases(.)) %>% 
+  separate(col = "bigram",into = c("word1","word2"),remove = FALSE, sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word) %>% 
+  count(bigram, sort = TRUE) %>% 
+  slice(1:10)
+
+```
+
+```{r graph}
+
+twain_bigrams %>% 
+  filter(complete.cases(.)) %>% 
+  separate(col = "bigram",into = c("word1","word2"),remove = FALSE, sep = " ") %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word) %>% 
+  count(word1,word2, sort = TRUE) %>% 
+  filter(n > 10) %>% 
+  graph_from_data_frame() %>% 
+  ggraph(layout = "fr") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)+
+  theme_graph()
+
+```
+
+
+
+# LDA
+
+```{r}
+
+
+book_ids = data.frame(
+  title = c(
+    "Alice's Adventures in Wonderland",
+    "Through the Looking-Glass  ",
+    "The Adventures of Tom Sawyer",
+    "Adventures of Huckleberry Finn",
+    "A Connecticut Yankee in King Arthur's Court",
+    "The Innocents Abroad"
+  ),
+  gutenberg_id = c(11, 12, 74, 76, 86, 3176)
+)
+
+books  = corpus %>% 
+  filter(gutenberg_id %in% book_ids$gutenberg_id) %>% 
+  left_join(book_ids, by = "gutenberg_id")
+
+by_chapter <- books %>%
+  group_by(title) %>%
+  mutate(chapter = cumsum(as.numeric(str_detect(
+    text, regex("^chapter ", ignore_case = TRUE)
+  )))) %>%
+  ungroup() %>%
+  filter(chapter > 0) %>%
+  unite(document, title, chapter)
+
+# split into words
+by_chapter_word <- by_chapter %>%
+  unnest_tokens(word, text)
+
+# find document-word counts
+word_counts <- by_chapter_word %>%
+  anti_join(stop_words, by = "word") %>%
+  count(document, word, sort = TRUE) %>%
+  ungroup()
+
+word_counts %>% head(10) 
+
+#dtm is the format we need for LDA
+chapters_dtm <- word_counts %>%
+  cast_dtm(document, word, n)
+
+chapters_dtm
+
+```
+
+```{r lda}
+
+lda_books = LDA(chapters_dtm, k = 6, control = list(seed = 1234))
+
+per_word_prob = tidy(lda_books, matrix = "beta")
+
+per_book_prob = tidy(lda_books, matrix = "gamma")
+
+```
+
+```{r plot_frequent_words}
+
+per_word_prob %>% 
+  group_by(topic) %>% 
+  slice_max(order_by = beta,n = 5) %>% 
+  ungroup() %>% 
+  arrange(topic, -beta) %>% 
+  mutate(term = reorder_within(term, beta, topic)) %>% 
+  ggplot(aes(x = term, y = beta)) + 
+  geom_col(show.legend = FALSE) + 
+  coord_flip() + 
+  facet_wrap(~topic, scales = "free") + 
+  scale_x_reordered()
+
+```
+
+```{r separate_gamma}
+
+per_book_prob = per_book_prob %>% 
+  separate(document, c("title", "chapter"), sep = "_", convert = TRUE)
+
+per_book_prob %>% 
+  group_by(title, chapter) %>% 
+  top_n(1,gamma) %>% 
+  ungroup()
 
 ```
 
